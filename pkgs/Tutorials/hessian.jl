@@ -4,7 +4,7 @@ import NPZ, Optim, LineSearches, Plots
 
 using FiniteDiff, StaticArrays
 
-matrix = "H2_sto-3g_singlet_1.5_P-m"    # MATRIX FILE
+matrix = "H4chain_sto3g_1.5"    # MATRIX FILE
 T = 5.0 # ns                # TOTAL DURATION OF PULSE
 W = 10                      # NUMBER OF WINDOWS IN EACH PULSE
 
@@ -35,6 +35,8 @@ maxiter = 1#0000             # MAXIMUM NUMBER OF ITERATIONS
 
 # LOAD MATRIX AND EXTRACT REFERENCE STATES
 H = NPZ.npzread("$(@__DIR__)/matrix/$matrix.npy")
+#print(H)
+
 n = CtrlVQE.QubitOperators.nqubits(H)
 
 ψ_REF = CtrlVQE.QubitOperators.reference(H) # REFERENCE STATE
@@ -49,6 +51,8 @@ FES = Λ[2]                                  # FIRST EXCITED STATE
 # CONSTRUCT THE MAJOR PACKAGE OBJECTS
 
 pulse = CtrlVQE.UniformWindowed(CtrlVQE.Signals.ComplexConstant(0.0, 0.0), T, W)
+#print("pulse  ", pulse)
+
 ΩMAX /= √2  # Re-scale max amplitude so that bounds inscribe the complex circle.
 # Not needed for real or polar-parameterized amplitudes.
 # pulse = CtrlVQE.UniformWindowed(CtrlVQE.Signals.Constant(0.0), T, W)
@@ -61,6 +65,8 @@ algorithm = CtrlVQE.Rotate(r)
 
 # INITIALIZE PARAMETERS
 Random.seed!(seed)
+
+
 xi = CtrlVQE.Parameters.values(device)
 
 L = length(xi)                      # NUMBER OF PARAMETERS
