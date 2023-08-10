@@ -102,16 +102,20 @@ fn_penalty, gd_penalty = CtrlVQE.SmoothBounds.functions(λ, μR, μL, σ)
 fn = CtrlVQE.CompositeCostFunction(fn_energy, fn_penalty)
 gd = CtrlVQE.CompositeGradientFunction(gd_energy, gd_penalty)
 
-hessian = zeros(size(xi)[1], size(xi)[1])
-h = 0.0001
-for i in (1:size(xi)[1])
-    xin = zeros(size(xi))
-    xin[i] += h
-    xip = zeros(size(xi))
-    xip[i] -= h
-    hessian[i,:] = (gd(xin) - gd(xip))/(2*h)
-end
-print(hessian)
+function hessian(gd, xi)
+    hessian = zeros(size(xi)[1], size(xi)[1])
+    h = 0.0001
+    for i in (1:size(xi)[1])
+        xin = zeros(size(xi))
+        xin[i] += h
+        xip = zeros(size(xi))
+        xip[i] -= h
+        hessian[i,:] = (gd(xin) - gd(xip))/(2*h)
+    end
+end 
+hessian = hessian(gd, xi) 
+#hessian_module = FiniteDiff.finite_difference_hessian(fn,xi)
+#diff = hessian - hessian_module
 
 # OPTIMIZATION ALGORITHM
 linesearch = LineSearches.MoreThuente()
