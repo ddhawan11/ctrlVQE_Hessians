@@ -7,6 +7,7 @@ import Random
 import NPZ, Optim, LineSearches
 using LinearAlgebra
 using Printf
+using Plots
 
 matrix = "H2_sto-3g_singlet_1.5_P-m"    # MATRIX FILE
 T = 5.0 # ns                # TOTAL DURATION OF PULSE
@@ -133,11 +134,58 @@ function hessian(f, g, x; stepsize=1e-4)
     return .5*(H+H')
 end
 
-# H = hessian(fn, gd, xi)
+H = hessian(fn, gd, xi)
 
-function plot_pulse_normalmodes(H)
+function plot_pulse_normalmodes(H, nqubits; nvecs=4)
+    np = size(H,2)
+    size(H,2) % nqubits == 0 || throw(DimensionMismatch)
+    U, σ, V = svd(H)
+    σ = σ[1:nvecs]
+    U = U[:, 1:nvecs]
+    for σi in σ 
+        @printf(" %12.8f\n", σi)
+    end
+
+    Ur = U[[i%2==1 for i in 1:np], :] 
+    Ui = U[[i%2==0 for i in 1:np], :] 
+
+    np_per_qubit = np ÷ nqubits
+
+    Urs = Vector{Matrix}([])
+    Uis = Vector{Matrix}([])
+
+    shift = 1
+    for i in 1:nqubits
+        Uqr =  Ur[shift:shift+np_per_qubit ÷ 2 - 1, :]
+        Uqi =  Ui[shift:shift+np_per_qubit ÷ 2 - 1, :]
+        shift += np_per_qubit ÷ 2
+        
+        push!(Urs, Uqr)
+        push!(Uis, Uqi)
+    end
+
+    println(" Real")
+    for i in Urs
+        display(i)
+    end
+    println(" Imag")
+    for i in Uis
+        display(i)
+    end
+
+    colors = [:red, :blue, :green]
+    for i in 1:nvecs
+        plot()
+        for q in 1:nqubits
+            plot!(Urs[q][:,i], linestyle=:solid, linecolor=colors[q], label=@sprintf("ℜ Qubit: %i",q))
+            plot!(Uis[q][:,i], linestyle=:dash, linecolor=colors[q], label=@sprintf("ℑ Qubit: %i",q))
+        end
+        ylims!(-.5,.5)
+        savefig(@sprintf("norm_mode_%i.pdf", i))
+    end
 end
 
+plot_pulse_normalmodes(H, 2, nvecs=4)
 
 function my_opt(f, g, xi; nvecs=2, trust=1, thresh=1e-6, maxiter=30)
 
