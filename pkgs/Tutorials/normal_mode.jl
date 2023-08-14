@@ -225,7 +225,8 @@ function my_opt(f, g, xi; nvecs=2, trust=1, thresh=1e-6, maxiter=30)
         )
         τ, τ̄, t̄ = CtrlVQE.Evolutions.trapezoidaltimegrid(g.f.T, g.r)
         ∇f̄ .= CtrlVQE.Devices.gradient(g.f.device, τ̄, t̄, g.ϕ̄)
-        ∇f̄  = -U * U' * ∇f̄
+        ∇f̄  = - U * pinv(U' * H * U) * (U' * gd(xi)) # Projected pulse with initial inverse hessian
+        ∇f̄  = -U * U' * ∇f̄  #optimized pulse
 #        println(∇f̄)
         return ∇f̄
     end
