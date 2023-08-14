@@ -6,7 +6,8 @@ import CtrlVQE
 import Random, LinearAlgebra
 import NPZ, Optim, LineSearches, Plots
 
-matrix = "H4chain_sto3g_1.5"    # MATRIX FILE
+#matrix = "H4chain_sto3g_1.5"    # MATRIX FILE
+matrix = "H2_sto-3g_singlet_1.5_P-m"    # MATRIX FILE
 T = 5.0 # ns                # TOTAL DURATION OF PULSE
 W = 10                      # NUMBER OF WINDOWS IN EACH PULSE
 

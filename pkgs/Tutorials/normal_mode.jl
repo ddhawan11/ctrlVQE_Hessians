@@ -2,12 +2,18 @@
 
 ##########################################################################################
 #= PREAMBLE =#
+push!(LOAD_PATH,"/Users/dikshadhawan/Documents/ctrlVQE_Hessians/src")
+push!(LOAD_PATH,"/Users/dikshadhawan/Documents/ctrlVQE_Hessians/src/costfns")
 import CtrlVQE
 import Random 
 import NPZ, Optim, LineSearches
 using LinearAlgebra
 using Printf
 using Plots
+#import Evolutions, Parameters, LinearAlgebraTools, Devices
+#import QubitOperators
+#import Operators: StaticOperator, IDENTITY
+#import ...EnergyFunctions, ...AbstractGradientFunction
 
 matrix = "H2_sto-3g_singlet_1.5_P-m"    # MATRIX FILE
 T = 5.0 # ns                # TOTAL DURATION OF PULSE
@@ -87,6 +93,7 @@ fn_energy, gd_energy = CtrlVQE.ProjectedEnergy.functions(
     O0, ψ0, T, device, r;
     frame=CtrlVQE.STATIC,
 )
+println("O0  ", O0)
 
 # PENALTY FUNCTIONS
 λ  = zeros(L);  λ[Ω] .=    λΩ                               # PENALTY WEIGHTS
@@ -189,6 +196,41 @@ plot_pulse_normalmodes(H, 2, nvecs=4)
 
 function my_opt(f, g, xi; nvecs=2, trust=1, thresh=1e-6, maxiter=30)
 
+    function costfn(xi)
+        F = real(promote_type(Float16, eltype(O0), eltype(ψ0), eltype(T)))
+    
+        ψ = Array{CtrlVQE.LinearAlgebraTools.cis_type(F)}(undef, size(ψ0))
+        CtrlVQE.Parameters.bind(f.device, xi)
+        CtrlVQE.Evolutions.evolve(
+            f.algorithm,
+            f.device,
+            f.basis,
+            f.T,
+            f.ψ0;
+            result=ψ,)
+        return(real(CtrlVQE.LinearAlgebraTools.expectation(f.OT, ψ)))
+    end
+    
+    function gradfn(∇f̄::AbstractVector, xi::AbstractVector)
+        CtrlVQE.Parameters.bind(g.f.device, xi)
+        CtrlVQE.Evolutions.gradientsignals(
+        g.f.device,
+        g.f.basis,
+        g.f.T,
+        g.f.ψ0,
+        g.r,
+        g.f.OT;
+        result=g.ϕ̄,
+        evolution=g.f.algorithm,
+        )
+        τ, τ̄, t̄ = CtrlVQE.Evolutions.trapezoidaltimegrid(g.f.T, g.r)
+        ∇f̄ .= CtrlVQE.Devices.gradient(g.f.device, τ̄, t̄, g.ϕ̄)
+        ∇f̄  = -U * U' * ∇f̄
+#        println(∇f̄)
+        return ∇f̄
+    end
+    
+        
     function newton_step(U, xi)
 
         H = hessian(fn, gd, xi)                           # Recompute hessian
@@ -201,7 +243,6 @@ function my_opt(f, g, xi; nvecs=2, trust=1, thresh=1e-6, maxiter=30)
     function gradient_step(U, xi)
         return -U * U' * gd(xi)                       # This will try to optimize the projected pulse
     end
-
     H = hessian(f, g, xi)
     Ui, si, _ = svd(H)
     display(si[1:nvecs])
@@ -213,33 +254,51 @@ function my_opt(f, g, xi; nvecs=2, trust=1, thresh=1e-6, maxiter=30)
     display(Hss)
     println()
     xcurr = deepcopy(xi)
-    for i in 1:maxiter
-        ecurr = f(xcurr)
-        δx = newton_step(U, xcurr)
-        # δx = gradient_step(U, xcurr)
+    # # OPTIMIZATION ALGORITHM
+    linesearch = LineSearches.MoreThuente()
+    optimizer = Optim.LBFGS(linesearch=linesearch)
 
-        function stepsize_fun(α)
-            return f(xcurr + δx*α[1])
-        end
+    # # OPTIMIZATION OPTIONS
+    options = Optim.Options(
+         show_trace = true,
+         show_every = 1,
+         f_tol = f_tol,
+         g_tol = g_tol,
+         iterations = maxiter,
+     )
+    optimization = Optim.optimize(costfn, gradfn, xi, optimizer, options)
+#    optimization = Optim.optimize(f,g, xi, optimizer, options)
 
-        α = 0.0
-        res = Optim.optimize(stepsize_fun, [α])
-        α = Optim.minimizer(res)[1]
+    xf = Optim.minimizer(optimization)      # FINAL PARAMETERS
+    # for i in 1:maxiter
+    #      ecurr = f(xcurr)
+    #      δx = newton_step(U, xcurr)
+    #     # δx = gradient_step(U, xcurr)
 
-        δx = δx * α
-        nδx = norm(δx)
+    #     function stepsize_fun(α)
+    #         return f(xcurr + δx*α[1])
+    #     end
 
-        δx .= δx .* min(trust, nδx) ./ nδx
+    #     α = 0.0
+    #     res = Optim.optimize(stepsize_fun, [α])
+    #     α = Optim.minimizer(res)[1]
 
-        @printf(" Step: %4i %12.8f |g| = %12.8f |x| = %12.8f α = %12.8f\n", i, f(xcurr), norm(g(xcurr)), norm(δx), α)
-        xcurr += δx
-        if norm(δx) < thresh
-            break
-        end
-    end
+    #     δx = δx * α
+    #     nδx = norm(δx)
+
+    #     δx .= δx .* min(trust, nδx) ./ nδx
+
+    #     @printf(" Step: %4i %12.8f |g| = %12.8f |x| = %12.8f α = %12.8f\n", i, f(xcurr), norm(g(xcurr)), norm(δx), α)
+    #     xcurr += δx
+    #     if norm(δx) < thresh
+    #         break
+    #     end
+    # end
 end
 
-my_opt(fn, gd, xi, nvecs=2, trust=.1, maxiter=20)
+
+
+my_opt(fn_energy, gd_energy, xi, nvecs=2, trust=.1, maxiter=20)
 
 
 
